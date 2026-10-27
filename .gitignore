@@ -1,0 +1,20 @@
+# Go
+gateway/vendor/
+
+# Python
+decider/__pycache__/
+decider/*.egg-info/
+decider/.venv/
+decider/venv/
+
+# Node
+dashboard/node_modules/
+dashboard/dist/
+dashboard/.env
+
+# Env files
+.env
+.env.local
+
+# OS
+.DS_Store
