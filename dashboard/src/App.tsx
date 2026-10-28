@@ -1,3 +1,25 @@
+/**
+ * App — root component and ride-booking state machine.
+ *
+ * The UI is a finite state machine with five states:
+ *
+ *   set_pickup → set_dropoff → confirm → waiting → matched
+ *                                          ↑ on error, back to confirm
+ *
+ * Each state change is triggered by either a map click (set_pickup/set_dropoff)
+ * or a button click (confirm → waiting, matched → set_pickup via reset).
+ *
+ * Why a state machine instead of boolean flags?
+ * Booleans like `hasPickup`, `isWaiting`, `isMatched` quickly get contradictory
+ * ("what does isWaiting=true AND isMatched=true mean?"). A single `step` string
+ * makes illegal states unrepresentable — only the current step's UI renders.
+ *
+ * Polling for ride status:
+ * After POST /rides, the decider service assigns a vehicle asynchronously.
+ * We poll GET /rides/:id every 1.5 s until status becomes "matched" or
+ * "en_route". In production this would be a WebSocket subscription to avoid
+ * polling, but for a demo the extra HTTP traffic is negligible.
+ */
 import { useState, useCallback } from 'react';
 import RideMap from './components/RideMap';
 import { useFleet } from './hooks/useFleet';
@@ -6,6 +28,7 @@ import './App.css';
 
 const GATEWAY = import.meta.env.VITE_GATEWAY_URL ?? 'http://localhost:8080';
 
+// Step is the complete set of UI states — exhaustive union prevents typos.
 type Step = 'set_pickup' | 'set_dropoff' | 'confirm' | 'waiting' | 'matched';
 
 export default function App() {

@@ -1,3 +1,29 @@
+/**
+ * RideMap — Mapbox GL JS map component that renders the live vehicle fleet,
+ * the rider's chosen pickup/dropoff pins, and highlights the matched vehicle.
+ *
+ * Key design decisions:
+ *
+ * 1. Imperative markers, not React state — Mapbox markers are DOM nodes managed
+ *    by the library, not React. We keep a markersRef (Map<id, Marker>) and
+ *    update marker position/colour IN PLACE each render rather than
+ *    remove-and-recreate. Remove+recreate causes a visible flicker every 500ms.
+ *
+ * 2. Three separate useEffect hooks (map init, vehicles, pickup, dropoff) with
+ *    tight dependency arrays — React's rule: one effect, one concern. The map
+ *    init effect runs once; the vehicle effect runs on every fleet tick; the
+ *    pin effects run only when their coordinates change.
+ *
+ * 3. onMapClickRef — the map init effect can only run once (empty deps []) but
+ *    needs a fresh `onMapClick` callback each render. We store it in a ref
+ *    so the click handler always calls the latest version without re-running
+ *    the expensive map init.
+ *
+ * 4. Pulse CSS animation — Mapbox markers live in a shadow DOM layer outside
+ *    React's render tree, so App.css styles don't reach them. We inject a
+ *    <style> tag into document.head once (guarded by id) so the keyframe is
+ *    always available when we toggle `animation` on a matched marker's element.
+ */
 import { useEffect, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
 import type { Vehicle, LatLng } from '../types';
