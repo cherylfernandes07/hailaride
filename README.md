@@ -51,7 +51,7 @@ hailaride/
 | API Gateway | Go, goroutines, WebSockets |
 | AI Decisions | Python, FastAPI, Strands Agents SDK, Strands Decider 2B |
 | Message Generation | Amazon Bedrock Nova Micro (`us.amazon.nova-micro-v1:0`) |
-| Database | In-memory (DynamoDB-ready) |
+| Database | DynamoDB (on-demand, TTL 24h) · DynamoDB Local for dev |
 | Map | Mapbox GL JS |
 | Frontend | React, TypeScript, Vite |
 
