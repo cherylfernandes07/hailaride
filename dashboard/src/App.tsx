@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import Map from './components/Map';
+import RideMap from './components/RideMap';
 import { useFleet } from './hooks/useFleet';
 import type { LatLng, Ride } from './types';
 import './App.css';
@@ -82,7 +82,7 @@ export default function App() {
 
       {/* Map */}
       <div className="map-wrap">
-        <Map
+        <RideMap
           vehicles={vehicles}
           pickup={pickup}
           dropoff={dropoff}

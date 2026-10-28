@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,14 +17,39 @@ import (
 	"github.com/hailaride/gateway/internal/ws"
 )
 
+// RideStorer is the interface both in-memory and DynamoDB stores implement.
+type RideStorer interface {
+	Create(pickup, dropoff rides.Location) *rides.Ride
+	Get(id string) (*rides.Ride, bool)
+	Update(id string, fn func(*rides.Ride)) bool
+}
+
 var (
 	deciderURL = envOr("DECIDER_URL", "http://localhost:8001")
 	f          = fleet.New(10)
-	rideStore  = rides.NewStore()
+	rideStore  RideStorer
 	hub        = ws.NewHub()
 )
 
+func initRideStore() {
+	// Use DynamoDB when a table name or local endpoint is configured.
+	// Falls back to in-memory for plain local dev (no Docker required).
+	if os.Getenv("DYNAMODB_TABLE") != "" || os.Getenv("DYNAMODB_ENDPOINT") != "" {
+		store, err := rides.NewDynamoStore(context.Background())
+		if err != nil {
+			log.Fatalf("DynamoDB init failed: %v — set DYNAMODB_TABLE or DYNAMODB_ENDPOINT", err)
+		}
+		log.Printf("Ride store: DynamoDB table=%s", envOr("DYNAMODB_TABLE", "hailaride-rides"))
+		rideStore = store
+	} else {
+		log.Printf("Ride store: in-memory (set DYNAMODB_TABLE to use DynamoDB)")
+		rideStore = rides.NewStore()
+	}
+}
+
 func main() {
+	initRideStore()
+
 	// Start simulated vehicle drift
 	f.StartSimulation(3 * time.Second)
 
@@ -134,6 +160,9 @@ func dispatchRide(rideID string, pickup rides.Location) {
 	})
 	f.SetStatus(result.VehicleID, fleet.StatusEnRoute)
 
+	// Tell the vehicle to drive toward the pickup point
+	f.SetTarget(result.VehicleID, pickup.Lat, pickup.Lng)
+
 	// Notify dashboard
 	hub.Broadcast(map[string]any{
 		"type":       "ride_matched",
@@ -142,7 +171,8 @@ func dispatchRide(rideID string, pickup rides.Location) {
 		"message":    result.Message,
 	})
 
-	log.Printf("ride %s matched to vehicle %s", rideID, result.VehicleID)
+	log.Printf("ride %s matched to vehicle %s — driving to pickup (%.4f, %.4f)",
+		rideID, result.VehicleID, pickup.Lat, pickup.Lng)
 }
 
 // helpers

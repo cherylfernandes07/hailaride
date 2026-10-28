@@ -1,0 +1,131 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  HailARide — Decider Service
+  Deploys the Strands Decider 2B + Amazon Bedrock vehicle dispatch agent
+  as a serverless Lambda function behind API Gateway.
+
+  Decision pattern: Tool Selection
+  The agent selects the best available vehicle for each ride request.
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Runtime: python3.11
+    Environment:
+      Variables:
+        AWS_REGION_NAME: !Ref AWS::Region
+        BEDROCK_MODEL_ID: us.amazon.nova-micro-v1:0
+
+Parameters:
+  GuardrailId:
+    Type: String
+    Description: Bedrock Guardrail ID for rider message content filtering
+    Default: ""
+
+  GuardrailVersion:
+    Type: String
+    Description: Bedrock Guardrail version
+    Default: "1"
+
+  Stage:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+    Description: Deployment stage
+
+Resources:
+
+  # ── IAM Role ────────────────────────────────────────────────────────────────
+  DeciderFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub hailaride-decider-role-${Stage}
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: BedrockInvokePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource:
+                  - !Sub arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.nova-micro-v1:0
+                  - !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:guardrail/*
+
+  # ── Lambda Function ──────────────────────────────────────────────────────────
+  DeciderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub hailaride-decider-${Stage}
+      CodeUri: decider/
+      Handler: lambda_handler.handler
+      Role: !GetAtt DeciderFunctionRole.Arn
+      Description: >
+        Strands Decider 2B vehicle dispatch agent.
+        Selects the best available vehicle for each ride request
+        and generates a rider-facing status message via Bedrock Nova Micro.
+      Environment:
+        Variables:
+          BEDROCK_GUARDRAIL_ID: !Ref GuardrailId
+          BEDROCK_GUARDRAIL_VERSION: !Ref GuardrailVersion
+          STAGE: !Ref Stage
+      Events:
+        DecideApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DeciderApi
+            Path: /decide
+            Method: POST
+        HealthApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DeciderApi
+            Path: /health
+            Method: GET
+
+  # ── API Gateway ──────────────────────────────────────────────────────────────
+  DeciderApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub hailaride-decider-api-${Stage}
+      StageName: !Ref Stage
+      Cors:
+        AllowMethods: "'GET,POST,OPTIONS'"
+        AllowHeaders: "'Content-Type'"
+        AllowOrigin: "'*'"
+      Auth:
+        DefaultAuthorizer: NONE
+
+  # ── CloudWatch Log Group ─────────────────────────────────────────────────────
+  DeciderLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/hailaride-decider-${Stage}
+      RetentionInDays: 14
+
+Outputs:
+  DeciderApiUrl:
+    Description: API Gateway endpoint — set as DECIDER_URL in the Go gateway
+    Value: !Sub https://${DeciderApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}
+    Export:
+      Name: !Sub hailaride-decider-url-${Stage}
+
+  DeciderFunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt DeciderFunction.Arn
+
+  DeciderFunctionName:
+    Description: Lambda function name
+    Value: !Ref DeciderFunction

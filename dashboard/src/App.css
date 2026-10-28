@@ -111,6 +111,12 @@ body {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0   rgba(255,107,53,0.7), 0 2px 6px rgba(0,0,0,0.4); }
+  70%  { box-shadow: 0 0 0 12px rgba(255,107,53,0),   0 2px 6px rgba(0,0,0,0.4); }
+  100% { box-shadow: 0 0 0 0   rgba(255,107,53,0),   0 2px 6px rgba(0,0,0,0.4); }
+}
+
 .match-card {
   background: #1e2340;
   border: 1px solid #3a3d5e;

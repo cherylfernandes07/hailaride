@@ -1,0 +1,89 @@
+##############################################################################
+# HailARide — Local development stack (million-scale ready)
+#
+# Services:
+#   dynamodb-local  DynamoDB Local (replaces in-memory ride store)
+#   gateway         Go API + WebSocket hub (port 8080)
+#   decider         Python Strands + Bedrock decider (port 8001)
+#   dashboard       React frontend — use `npm run dev` locally or build here
+#
+# Usage:
+#   cp .env.example .env && edit .env
+#   docker compose up --build
+#   open http://localhost:3000
+#
+# For Vercel deployment, deploy dashboard/ separately:
+#   vercel --cwd dashboard
+##############################################################################
+
+services:
+
+  # ── DynamoDB Local ─────────────────────────────────────────────────────────
+  dynamodb-local:
+    image: amazon/dynamodb-local:2.5.2
+    container_name: hailaride-dynamo
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory"]
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── Gateway (Go) ────────────────────────────────────────────────────────────
+  gateway:
+    build:
+      context: ./gateway
+    container_name: hailaride-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      DECIDER_URL: "http://decider:8001"
+      DYNAMODB_ENDPOINT: "http://dynamodb-local:8000"
+      DYNAMODB_TABLE: "hailaride-rides"
+      AWS_REGION: "us-east-2"
+    depends_on:
+      dynamodb-local:
+        condition: service_healthy
+      decider:
+        condition: service_started
+    restart: unless-stopped
+
+  # ── Decider (Python + Strands + Bedrock) ─────────────────────────────────
+  decider:
+    build:
+      context: ./decider
+    container_name: hailaride-decider
+    ports:
+      - "8001:8001"
+    environment:
+      AWS_REGION: "${AWS_REGION:-us-east-2}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}"
+      BEDROCK_MODEL_ID: "us.amazon.nova-micro-v1:0"
+      BEDROCK_GUARDRAIL_ID: "${BEDROCK_GUARDRAIL_ID:-}"
+      BEDROCK_GUARDRAIL_VERSION: "${BEDROCK_GUARDRAIL_VERSION:-1}"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Dashboard (React — production build) ──────────────────────────────────
+  # For local dev, use `npm run dev` in dashboard/ instead.
+  # This container is for testing the production nginx build.
+  dashboard:
+    build:
+      context: ./dashboard
+      args:
+        VITE_MAPBOX_TOKEN: "${VITE_MAPBOX_TOKEN}"
+        VITE_GATEWAY_URL: "http://localhost:8080"
+    container_name: hailaride-dashboard
+    ports:
+      - "3000:80"
+    depends_on:
+      - gateway
+    restart: unless-stopped
