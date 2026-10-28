@@ -41,10 +41,14 @@ services:
     environment:
       PORT: "8080"
       DECIDER_URL: "http://decider:8001"
+      # Docker Compose networking: service names resolve as hostnames.
+      # "dynamodb-local" here is the service name above, not a real hostname.
       DYNAMODB_ENDPOINT: "http://dynamodb-local:8000"
       DYNAMODB_TABLE: "hailaride-rides"
       AWS_REGION: "us-east-2"
     depends_on:
+      # service_healthy waits for DynamoDB Local's health check to pass
+      # before starting the gateway — avoids "connection refused" on startup.
       dynamodb-local:
         condition: service_healthy
       decider:

@@ -17,7 +17,12 @@ import (
 	"github.com/hailaride/gateway/internal/ws"
 )
 
-// RideStorer is the interface both in-memory and DynamoDB stores implement.
+// RideStorer is the interface both in-memory and DynamoDB stores satisfy.
+// Go interfaces are implicit — a type doesn't declare that it implements one,
+// it just has matching method signatures. This lets us swap the backing store
+// at startup without changing any of the handler code that calls it.
+// Pattern: "program to an interface, not an implementation" — same idea as
+// a Repository pattern in Java/C#, just expressed as a Go interface.
 type RideStorer interface {
 	Create(pickup, dropoff rides.Location) *rides.Ride
 	Get(id string) (*rides.Ride, bool)
@@ -31,6 +36,11 @@ var (
 	hub        = ws.NewHub()
 )
 
+// initRideStore selects the ride store implementation at startup based on
+// environment variables, so the same binary works in three contexts:
+//   - Local dev (no env vars)  → in-memory store, zero setup
+//   - Docker Compose           → DYNAMODB_ENDPOINT=http://dynamodb-local:8000
+//   - Production ECS           → DYNAMODB_TABLE=hailaride-rides (real AWS)
 func initRideStore() {
 	// Use DynamoDB when a table name or local endpoint is configured.
 	// Falls back to in-memory for plain local dev (no Docker required).

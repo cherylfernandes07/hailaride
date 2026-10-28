@@ -30,13 +30,19 @@ import (
 )
 
 // DynamoStore is a DynamoDB-backed ride store.
-// Drop-in replacement for the in-memory Store: same Create/Get/Update API.
+// Drop-in replacement for the in-memory Store: same Create/Get/Update API,
+// so main.go swaps the implementation without changing any call sites.
+// Designed to be shared across multiple ECS replicas — DynamoDB is the
+// single source of truth for ride state, with no in-process locking needed.
 type DynamoStore struct {
 	client    *dynamodb.Client
 	tableName string
 }
 
 // rideItem mirrors Ride but with DynamoDB-friendly field names.
+// The `dynamodbav` struct tags control how the AWS SDK serializes each field
+// to DynamoDB's AttributeValue format (S = string, N = number, M = map).
+// We keep this as a separate type so the domain Ride struct stays clean.
 type rideItem struct {
 	RideID    string `dynamodbav:"ride_id"`
 	Pickup    struct {
@@ -205,7 +211,11 @@ func (d *DynamoStore) Update(id string, fn func(*Ride)) bool {
 	return true
 }
 
-// isErrType checks whether err matches a specific AWS error type.
+// isErrType checks whether err matches a specific AWS SDK error type.
+// The AWS SDK v2 wraps errors in typed structs (e.g. *types.ResourceInUseException),
+// so we compare the runtime type name as a string rather than using errors.As,
+// which requires an exact pointer match. This is intentionally lightweight —
+// it's only used to tell "table already exists" from a real connection error.
 func isErrType[T error](err error, target *T) bool {
 	if err == nil {
 		return false
