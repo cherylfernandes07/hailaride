@@ -1,4 +1,13 @@
-// Package fleet manages simulated vehicles in Mountain View / San Jose.
+// Package fleet simulates an autonomous vehicle fleet in Mountain View / San Jose.
+//
+// In a production system these would be real GPS positions streamed from vehicles.
+// Here, available vehicles drift randomly inside a bounding box and en_route
+// vehicles steer toward their assigned pickup using a simple lerp (linear
+// interpolation) — good enough to demonstrate the full dispatch lifecycle.
+//
+// Concurrency: all state is behind a sync.RWMutex.
+// Reads (All, Get) hold a read lock — multiple goroutines can read in parallel.
+// Writes (SetStatus, SetTarget, simulation tick) hold a full write lock.
 package fleet
 
 import (
